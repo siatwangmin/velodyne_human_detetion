@@ -104,7 +104,7 @@ class ExtractClusters
 		clustering.extract(cluster_indices);
 
 		double clustering_time = (ros::Time::now () - begin_clustering).toSec ();
-		ROS_INFO ("%f secs for clustering (%d clusters).", clustering_time, (int) cluster_indices.size ());
+		// ROS_INFO ("%f secs for clustering (%d clusters).", clustering_time, (int) cluster_indices.size ());
 	  
 	  
 	  /*Extract each cluster and store them in:
@@ -116,20 +116,20 @@ class ExtractClusters
 	  
 	  int index = 0;
 	  //Creates folder to store every cluster in one image
-	  double clusterTime = (ros::Time::now()-begin).toSec();
-	  std::stringstream convertclusterTime;
-	  convertclusterTime << clusterTime;
-	  std::string foldername = "pruebas/cluster" + convertclusterTime.str();
-	  mkdir(foldername.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+	//   double clusterTime = (ros::Time::now()-begin).toSec();
+	//   std::stringstream convertclusterTime;
+	//   convertclusterTime << clusterTime;
+	//   std::string foldername = "pruebas/cluster" + convertclusterTime.str();
+	//   mkdir(foldername.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 	  
 	  //For every cluster, store it into file and publisher structure
 	  for(it = cluster_indices.begin(); it != cluster_indices.end(); ++it) {
 			pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZ>);
 		  pcl::copyPointCloud (*filteredInputPclCloud, it->indices, *cloud_cluster);
-		  std::stringstream convertIndex;		  
-		  convertIndex << index;
-		  std::string filename = "pruebas/cluster" + convertclusterTime.str() + "/" + convertIndex.str() + ".pcd"; 
-		  pcl::io::savePCDFileASCII (filename, *cloud_cluster);
+		//   std::stringstream convertIndex;		  
+		//   convertIndex << index;
+		//   std::string filename = "pruebas/cluster" + convertclusterTime.str() + "/" + convertIndex.str() + ".pcd"; 
+		//   pcl::io::savePCDFileASCII (filename, *cloud_cluster);
 			pcl::toROSMsg (*cloud_cluster , *auxiliarCluster);
 			auxiliarCluster->header.frame_id = "/velodyne";
 			auxiliarCluster->header.stamp = ros::Time::now();
@@ -146,7 +146,7 @@ class ExtractClusters
 	  pub2.publish (*clustersCloudRos);
 		n_published_msgs++;
 		double elapsed_time = (ros::Time::now () - begin).toSec ();
-		ROS_INFO("Cluster publish freq: %f msgs/s - %d msgs in %f secs.", (float) n_published_msgs / elapsed_time, n_published_msgs, elapsed_time);
+		// ROS_INFO("Cluster publish freq: %f msgs/s - %d msgs in %f secs.", (float) n_published_msgs / elapsed_time, n_published_msgs, elapsed_time);
 
 	}
 	

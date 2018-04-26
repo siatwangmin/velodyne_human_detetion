@@ -38,22 +38,26 @@ geometry_msgs::PointStamped robotPose;
 float topPoint, lowestPoint;
 
 
-void transformPersonPosition (const tf::TransformListener& listener){
+void transformPersonPosition (const tf::TransformListener& listener)
+{
 	personCentroid.header.frame_id = "/velodyne";
 	personCentroid.header.stamp = ros::Time();
-	try{
-    listener.transformPoint("world", personCentroid, personCentroidTransformed);
-	
-	if(personCentroid.point.x != 0 || personCentroid.point.y != 0 || personCentroid.point.z != 0){
-		ROS_INFO("personCentroid: (%.2f, %.2f, %.2f) -----> personCentroidTransformed: (%.2f, %.2f, %.2f)",
-		 	personCentroid.point.x, personCentroid.point.y, personCentroid.point.z,
+	try
+	{
+		listener.transformPoint("world", personCentroid, personCentroidTransformed);
+
+		if(personCentroid.point.x != 0 || personCentroid.point.y != 0 || personCentroid.point.z != 0)
+		{
+			ROS_INFO("personCentroid: (%.2f, %.2f, %.2f) -----> personCentroidTransformed: (%.2f, %.2f, %.2f)",
+			personCentroid.point.x, personCentroid.point.y, personCentroid.point.z,
 			personCentroidTransformed.point.x, personCentroidTransformed.point.y,
 			personCentroidTransformed.point.z);
+		}
 	}
-  }
-  catch(tf::TransformException& ex){
-  	ROS_ERROR("Received an exception trying to transform a point from \"personCentroid\" to 		\"personCentroidTransformed\": %s", ex.what());
-  }
+	catch(tf::TransformException& ex)
+	{
+		ROS_ERROR("Received an exception trying to transform a point from \"personCentroid\" to 		\"personCentroidTransformed\": %s", ex.what());
+	}
 }
 
 bool clusterIsRobot(float clusterX, float clusterY){
@@ -82,16 +86,18 @@ bool clusterIsPerson(float height){
 
 class FindPerson
 {
-  protected:
-    ros::NodeHandle n;
-  public:
-    ros::Publisher pub = n.advertise<sensor_msgs::PointCloud2> ("person_cloud", 1);
-    ros::Publisher pub2 = n.advertise<geometry_msgs::PointStamped> ("person_position", 1);
-    ros::Subscriber subBackground;
-    ros::Subscriber subClusters;
-    ros::Subscriber subRobotInfo;
-    tf::TransformListener listener;
-    Ice::CommunicatorPtr ic;
+protected:
+ros::NodeHandle n;
+	
+public:
+	ros::Publisher pub  = n.advertise<sensor_msgs::PointCloud2> ("person_cloud", 1);
+	ros::Publisher pub2 = n.advertise<geometry_msgs::PointStamped> ("person_position", 1);
+	
+	ros::Subscriber subBackground;
+	ros::Subscriber subClusters;
+	ros::Subscriber subRobotInfo;
+	tf::TransformListener listener;
+	Ice::CommunicatorPtr ic;
     
 	//Set background cloud in a global variable. One message every X seconds
 	void findPersonBackgroundCallback(const boost::shared_ptr<sensor_msgs::PointCloud2>& inputBackgroundCloud)
@@ -99,13 +105,18 @@ class FindPerson
 		backgroundCloud = inputBackgroundCloud;
 		pcl::fromROSMsg(*backgroundCloud,backgroundCloudPCL);
 		backgroundSize = backgroundCloud->width;
-		
-		
+
+
 		pcl::PointCloud<pcl::PointXYZ>::iterator it;
 		for(it = backgroundCloudPCL.points.begin(); it < backgroundCloudPCL.points.end(); it++)
 		{
-			if (-5 <= it->x && it->x < 5 && -5 <= it->y && it->y < 5 && -1.5 <= it->z && it->z < 1.5)
-     	{
+			if (-5 <= it->x && 
+				it->x < 5 && 
+				-5 <= it->y && 
+				it->y < 5 && 
+				-1.5 <= it->z && 
+				it->z < 1.5)
+			{
 				backgroundGrid[int((it->x)*10+50)][int((it->y)*10+50)][int((it->z)*10+15)] = true;
 			}
 		}	
@@ -115,6 +126,8 @@ class FindPerson
 	//Receive data and perform the actual person detection. Lots of messages every second
 	void findPersonClustersCallback(const boost::shared_ptr<velodyne_detect_person::pointCloudVector>& clusterVector)
 	{
+		std::cout << "I need a background cloud!" << std::endl;
+		ROS_INFO("hey there");
 		pcl::PointCloud<pcl::PointXYZ>::Ptr clustersCloud (new pcl::PointCloud<pcl::PointXYZ>); //Contains every person cluster and is visible in rviz
 		pcl::PointCloud<pcl::PointXYZ> auxiliarCluster;
 		sensor_msgs::PointCloud2::Ptr clustersCloudRos (new sensor_msgs::PointCloud2);
@@ -122,38 +135,46 @@ class FindPerson
 		personCentroid.point.y = 0;
 	
 	
-		if(backgroundSize == 0) {
+		if(backgroundSize == 0)
+		{
 			std::cout << "I need a background cloud!" << std::endl;
 		}
-		else {		
+		else
+		{		
 			//For each cluster
-			for(int i = 0; i < clusterVector->pointCloudVector.size(); i++) {
+			for(int i = 0; i < clusterVector->pointCloudVector.size(); i++)
+			{
 				topPoint = -100, lowestPoint = 100;
 				int clusterPoints = clusterVector->pointCloudVector[i].width;  //cluster size
 				int numCoincidentPoints = 0;
 				pcl::fromROSMsg(clusterVector->pointCloudVector[i],clusterPCL);
 				
 				//Add 1 to counter if a point is in cluster and background
-				for(int pointCluster = 0; pointCluster < clusterPoints; pointCluster++) {
-					if (clusterPCL.points[pointCluster].z > topPoint) {
+				for(int pointCluster = 0; pointCluster < clusterPoints; pointCluster++)
+				{
+					if (clusterPCL.points[pointCluster].z > topPoint) 
+					{
 						topPoint = clusterPCL.points[pointCluster].z;
 					}
-					else if (clusterPCL.points[pointCluster].z < lowestPoint) {
+					else if (clusterPCL.points[pointCluster].z < lowestPoint) 
+					{
 						lowestPoint = clusterPCL.points[pointCluster].z;
 					}
 					if (-5 <= clusterPCL.points[pointCluster].x &&
-				  	clusterPCL.points[pointCluster].x < 5 &&
-					  -5 <= clusterPCL.points[pointCluster].y &&
-					  clusterPCL.points[pointCluster].y < 5 &&
-					  -1.5 <= clusterPCL.points[pointCluster].z &&
-					  clusterPCL.points[pointCluster].z < 1.5)
-     			{								
-						if(backgroundGrid[int((clusterPCL.points[pointCluster].x)*10+50)][int((clusterPCL.points[pointCluster].y)*10+50)][int((clusterPCL.points[pointCluster].z)*10+15)] == true){
+				  		clusterPCL.points[pointCluster].x < 5 &&
+					  	-5 <= clusterPCL.points[pointCluster].y &&
+					  	clusterPCL.points[pointCluster].y < 5 &&
+					  	-1.5 <= clusterPCL.points[pointCluster].z &&
+					  	clusterPCL.points[pointCluster].z < 1.5)
+     				{								
+						if(backgroundGrid[int((clusterPCL.points[pointCluster].x)*10+50)][int((clusterPCL.points[pointCluster].y)*10+50)][int((clusterPCL.points[pointCluster].z)*10+15)] == true)
+						{
+							// ROS_INFO("numCoincidentPoints add one");
 							numCoincidentPoints++;
 						}	
 					}		
 				}
-				
+				// ROS_INFO("coincident Point ratio %f", float(float(numCoincidentPoints)/float(clusterPoints)));
 				//If cluster is not in background (coincident points < 5%),
 				if(float(float(numCoincidentPoints)/float(clusterPoints)) < 0.05){
 					pcl::fromROSMsg(clusterVector->pointCloudVector[i],auxiliarCluster);	
@@ -162,25 +183,28 @@ class FindPerson
 					//If cluster is not the robot, the cluster is a person
 					//Save the position of the last person seen. This position will be sent to the robot
 					//TODO: Set transformation from /velodyne to /world automatically
-					if(!clusterIsRobot(centroid(0,0)+0.15,centroid(1,0)+1.78)){
-						if(clusterIsPerson(clusterHeight(topPoint, lowestPoint))){	
+
+					//if(!clusterIsRobot(centroid(0,0)+0.15,centroid(1,0)+1.78))
+					{
+						// if(clusterIsPerson(clusterHeight(topPoint, lowestPoint)))
+						{	
 							*clustersCloud += auxiliarCluster;
 							personCentroid.point.x = centroid(0,0);
 							personCentroid.point.y = centroid(1,0);
 							personCentroid.point.z = 0;
 							personCentroid.header.stamp = ros::Time();
+							ROS_INFO("get_person_cloud");
 						}
 					}
 				}
 			
 			}
 			pcl::toROSMsg (*clustersCloud , *clustersCloudRos);
-	  	clustersCloudRos->header.frame_id = "/velodyne";
-	  	clustersCloudRos->header.stamp = ros::Time::now();
+			clustersCloudRos->header.frame_id = "/velodyne";
+			clustersCloudRos->header.stamp = ros::Time::now();
 			
 			pub.publish (clustersCloudRos);		
 			
-
 			//Transform position into world frame
 			transformPersonPosition(listener);
 			pub2.publish (personCentroid);
@@ -188,27 +212,28 @@ class FindPerson
 			detectedPersonPose.y = personCentroidTransformed.point.y;
 			
 			//if not detected, set default control value (888)
-			if(personCentroid.point.x == 0 || personCentroid.point.y == 0){
+			if(personCentroid.point.x == 0 || personCentroid.point.y == 0)
+			{
 				detectedPersonPose.x = 888;
 				detectedPersonPose.y = 888;	
 			}
 			
 			
-			Ice::CommunicatorPtr ic;
-			try {
-				ic = Ice::initialize();
-				Ice::ObjectPrx base = ic->stringToProxy("PersonPositionTopic.Endpoints:tcp -h 192.168.0.100 -p 10000");
-				PersonPositionPrx personPosition = PersonPositionPrx::checkedCast(base);
-				if (!personPosition)
-					throw "Invalid proxy";
-				personPosition->personPose(detectedPersonPose);
-			} catch (const Ice::Exception& ex) {
-				cerr << ex << endl;
-			} catch (const char* msg) {
-				cerr << msg << endl;
-			}
-			if (ic)
-				ic->destroy();
+			// Ice::CommunicatorPtr ic;
+			// try {
+			// 	ic = Ice::initialize();
+			// 	Ice::ObjectPrx base = ic->stringToProxy("PersonPositionTopic.Endpoints:tcp -h 192.168.0.100 -p 10000");
+			// 	PersonPositionPrx personPosition = PersonPositionPrx::checkedCast(base);
+			// 	if (!personPosition)
+			// 		throw "Invalid proxy";
+			// 	personPosition->personPose(detectedPersonPose);
+			// } catch (const Ice::Exception& ex) {
+			// 	cerr << ex << endl;
+			// } catch (const char* msg) {
+			// 	cerr << msg << endl;
+			// }
+			// if (ic)
+			// 	ic->destroy();
 			
 			
 		
@@ -224,9 +249,9 @@ class FindPerson
 	
 	FindPerson()
     {
-      subBackground = n.subscribe("scene_background", 1, &FindPerson::findPersonBackgroundCallback, this);
-      subClusters = n.subscribe("scene_clusters", 1, &FindPerson::findPersonClustersCallback, this);
-      subRobotInfo = n.subscribe("robot_position", 1, &FindPerson::findPersonRobotPositionCallback, this);
+		subBackground = n.subscribe("scene_background", 1, &FindPerson::findPersonBackgroundCallback, this);
+		subClusters = n.subscribe("scene_clusters", 1, &FindPerson::findPersonClustersCallback, this);
+		subRobotInfo = n.subscribe("robot_position", 1, &FindPerson::findPersonRobotPositionCallback, this);
     }
 };
 

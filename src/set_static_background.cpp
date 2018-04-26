@@ -80,7 +80,7 @@ class SetBackground
 	  	//Create voxel grid
 	  	pcl::VoxelGrid<pcl::PCLPointCloud2> grid;
 	  	grid.setInputCloud (inputCloudPCL);
-	  	grid.setLeafSize (0.01f, 0.01f, 0.01f);
+	  	grid.setLeafSize (0.04f, 0.04f, 0.04f);
 	  	grid.filter (*outputCloudPCL);
 	  	pcl::fromPCLPointCloud2(*outputCloudPCL,auxCloud);
 	  	pcl::toROSMsg (auxCloud, *background);
@@ -164,7 +164,7 @@ class SetBackground
 	  	publishedCloud.header.stamp = ros::Time::now();	
 
 		  pub.publish (publishedCloud);
-		  std::cout << "Set cloud" << std::endl;
+		//   std::cout << "Set cloud" << std::endl;
 
 	  }
 	
