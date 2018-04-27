@@ -21,6 +21,11 @@
 #include <pcl_ros/point_cloud.h>
 #include <pcl_ros/transforms.h>
 
+#include <iostream>
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/registration/icp.h>
+
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 #define GRID_SIZE 0.1
 #define X_SIZE 100
@@ -33,11 +38,20 @@ typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 sensor_msgs::PointCloud2::Ptr background (new sensor_msgs::PointCloud2);
 sensor_msgs::PointCloud2::Ptr backgroundCandidates (new sensor_msgs::PointCloud2);
 pcl::PCLPointCloud2::Ptr inputCloudPCL (new pcl::PCLPointCloud2());
+
+pcl::PCLPointCloud2::Ptr inputCloudPCLSUM (new pcl::PCLPointCloud2());
+
 pcl::PCLPointCloud2::Ptr outputCloudPCL (new pcl::PCLPointCloud2());
 pcl::PointCloud<pcl::PointXYZ> auxCloud;
 sensor_msgs::PointCloud2::Ptr initialBackground (new sensor_msgs::PointCloud2);
 pcl::PCLPointCloud2::Ptr initialBackgroundPCL_pc2 (new pcl::PCLPointCloud2());
 pcl::PointCloud<pcl::PointXYZ>::Ptr initialBackgroundPCL(new pcl::PointCloud<pcl::PointXYZ>);
+
+
+pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
+pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
+pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_sum (new pcl::PointCloud<pcl::PointXYZ>);
+pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_union (new pcl::PointCloud<pcl::PointXYZ>);
 
 
 //Create a background grid and a buffer for each grid point
@@ -46,53 +60,55 @@ bool buffer[X_SIZE][Y_SIZE][Z_SIZE][BUFFER_SIZE];
 
 class SetBackground
 {
-  protected:
+protected:
     ros::NodeHandle n;
-  public:
-    ros::Publisher pub = n.advertise<sensor_msgs::PointCloud2> ("scene_background", 1);
+
+
+public:
+    ros::Publisher pub;
     ros::Subscriber sub;
-    bool firstTime = true;
+    bool firstTime;
+	int frame_num ;
     tf::TransformListener listener;
 
-	  void setBackgroundCallback(const boost::shared_ptr<sensor_msgs::PointCloud2>& inputCloud)
-	  {
-			
+	void setBackgroundCallback(const boost::shared_ptr<sensor_msgs::PointCloud2>& inputCloud)
+	{		
 	  	sensor_msgs::PointCloud2 publishedCloud;
 	  	pcl::PointCloud<pcl::PointXYZ> publishedCloudPCL;
 	  	
 	  	pcl::PCLPointCloud2 pcl_pc2;
 	  	pcl_conversions::toPCL(*inputCloud, pcl_pc2);
-	  	pcl::PointCloud<pcl::PointXYZ>::Ptr inputPclCloud(new pcl::PointCloud<pcl::PointXYZ>);
-	  	pcl::fromPCLPointCloud2(pcl_pc2,*inputPclCloud);
-	  	
-	  	
-	  	//Filter cloud to remove floor readings
-			pcl::PointCloud<pcl::PointXYZ>::Ptr filteredInputPclCloud(new pcl::PointCloud<pcl::PointXYZ>);
-			pcl::PassThrough<pcl::PointXYZ> pass;
-			pass.setInputCloud (inputPclCloud);
-			pass.setFilterFieldName ("z");
-			pass.setFilterLimits (-1.0, -0.85);
-			pass.setFilterLimitsNegative (true);
-			pass.filter (*filteredInputPclCloud);	
-			pcl::toPCLPointCloud2(*filteredInputPclCloud,*inputCloudPCL);	 
-	  	
-	  	
-	  	//Create voxel grid
-	  	pcl::VoxelGrid<pcl::PCLPointCloud2> grid;
-	  	grid.setInputCloud (inputCloudPCL);
-	  	grid.setLeafSize (0.04f, 0.04f, 0.04f);
-	  	grid.filter (*outputCloudPCL);
-	  	pcl::fromPCLPointCloud2(*outputCloudPCL,auxCloud);
-	  	pcl::toROSMsg (auxCloud, *background);
-	  	
-	  	
+
+		if(frame_num < 50)
+		{
+			pcl::fromROSMsg (*inputCloud, *cloud_in);
+			//  pcl::fromPCLPointCloud2(pcl_pc2,*cloud_in);
+			 *cloud_sum += *cloud_in;
+			
+			frame_num++;
+			ROS_INFO("Got %d frame", frame_num);
+			return;
+		}
+
+
 	  	//Add initial background cloud to prevent shadows
-	  	if(firstTime){
-	  		initialBackground = background;
-	  		pcl_conversions::toPCL(*initialBackground, *initialBackgroundPCL_pc2);
-	  		pcl::fromPCLPointCloud2(*initialBackgroundPCL_pc2,*initialBackgroundPCL);
-	  	}
-  		publishedCloudPCL += *initialBackgroundPCL;
+		if(firstTime)
+		{
+			pcl::toPCLPointCloud2(*cloud_sum,*inputCloudPCLSUM);
+			// *inputCloudPCLSUM += *inputCloudPCL;
+			pcl::VoxelGrid<pcl::PCLPointCloud2> grid;
+			grid.setInputCloud (inputCloudPCLSUM);
+			grid.setLeafSize (0.04f, 0.04f, 0.04f);
+			grid.filter (*outputCloudPCL);
+			pcl::fromPCLPointCloud2(*outputCloudPCL,auxCloud);
+			pcl::toROSMsg (auxCloud, *background);
+			initialBackground = background;
+			pcl_conversions::toPCL(*initialBackground, *initialBackgroundPCL_pc2);
+			pcl::fromPCLPointCloud2(*initialBackgroundPCL_pc2,*initialBackgroundPCL);
+		}
+		publishedCloudPCL += *initialBackgroundPCL;
+
+		ROS_INFO("published Cloud PCL size : %zu", publishedCloudPCL.size());
 	  	
 	  	/*
 	  	//For each point in grid, suppose it's not seen and set each value to false
@@ -157,37 +173,40 @@ class SetBackground
 				}
 			}
 			*/
-			firstTime = false;
+		firstTime = false;
 			
-			pcl::toROSMsg (publishedCloudPCL , publishedCloud);
-	  	publishedCloud.header.frame_id = "/velodyne";
-	  	publishedCloud.header.stamp = ros::Time::now();	
+		pcl::toROSMsg (publishedCloudPCL , publishedCloud);
+		publishedCloud.header.frame_id = "/velodyne";
+		publishedCloud.header.stamp = ros::Time::now();	
 
-		  pub.publish (publishedCloud);
+		pub.publish (publishedCloud);
 		//   std::cout << "Set cloud" << std::endl;
 
-	  }
+	}
 	
-	  SetBackground()
-    {
-    	sub = n.subscribe("velodyne_points", 1, &SetBackground::setBackgroundCallback, this);
-    }
+	SetBackground()
+	{
+		firstTime = true;
+		frame_num = 0;
+		pub = n.advertise<sensor_msgs::PointCloud2> ("scene_background", 1);
+		sub = n.subscribe("velodyne_points", 1, &SetBackground::setBackgroundCallback, this);
+	}
 };
 
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "set_background");
-  SetBackground setB;
+	ros::init(argc, argv, "set_background");
+	SetBackground setB;
 	ros::spin();
-/*
-  ros::Rate loop_rate(1);
+	/*
+	ros::Rate loop_rate(1);
 
-  while (ros::ok()){
+	while (ros::ok()){
 		ros::spinOnce();
 		loop_rate.sleep();
 	}
-*/
+	*/
 
-  return 0;
+	return 0;
 }

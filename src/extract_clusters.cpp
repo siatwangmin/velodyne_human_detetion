@@ -23,139 +23,239 @@
 #include <sstream>
 #include <string>
 
+#include <pcl/octree/octree2buf_base.h>
+#include <pcl/octree/octree_pointcloud_changedetector.h>
+#include <pcl/filters/voxel_grid.h>
+
+
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 using namespace pcl;
 using namespace pcl::io;
 using namespace pcl::console;
 
+pcl::PCLPointCloud2::Ptr newRawPCL2 (new pcl::PCLPointCloud2());
+
+pcl::PointCloud< pcl::PointXYZ >::Ptr backgroundCloudPCL(new pcl::PointCloud<pcl::PointXYZ>);
+pcl::PointCloud< pcl::PointXYZ >::Ptr newRawCloudPCL(new pcl::PointCloud<pcl::PointXYZ>);
+pcl::PointCloud< pcl::PointXYZ >::Ptr diffCloudPCL(new pcl::PointCloud<pcl::PointXYZ>);
+int backgroundSize = 0;
+sensor_msgs::PointCloud2::Ptr backgroundCloud (new sensor_msgs::PointCloud2);
+sensor_msgs::PointCloud2::Ptr raw_point_cloud (new sensor_msgs::PointCloud2);
+void findPersonBackgroundCallback(const boost::shared_ptr<sensor_msgs::PointCloud2>& inputBackgroundCloud)
+{
+	backgroundCloud = inputBackgroundCloud;
+	backgroundSize = backgroundCloud->width;
+
+	pcl::fromROSMsg(*backgroundCloud, *backgroundCloudPCL);
+}
+
 
 class ExtractClusters
 {
-  protected:
-    ros::NodeHandle n;
-		ros::Time begin;
-		int n_published_msgs;
-  public:
-    ros::Publisher pub = n.advertise<velodyne_detect_person::pointCloudVector> ("scene_clusters", 1);
-    ros::Publisher pub2 = n.advertise<sensor_msgs::PointCloud2> ("clustersCloud", 1);
-    ros::Subscriber sub;
+protected:
+	ros::NodeHandle n;
+	ros::Time begin;
+	int n_published_msgs;
+public:
+	ros::Publisher pubdiff;
+	ros::Publisher pub;
+	ros::Publisher pub2;
+	ros::Subscriber subBackground;
+	ros::Subscriber sub;
 
 	void extractClustersCallback(const boost::shared_ptr<sensor_msgs::PointCloud2>& inputCloud)
 	{
-	
-		//Convert ros PointCloud2 to pcl::PointCloud<pcl::pointXYZ>::Ptr
-	  pcl::PCLPointCloud2 pcl_pc2;
-	  pcl_conversions::toPCL(*inputCloud, pcl_pc2);
-	  pcl::PointCloud<pcl::PointXYZ>::Ptr inputPclCloud(new pcl::PointCloud<pcl::PointXYZ>);
-	  pcl::fromPCLPointCloud2(pcl_pc2,*inputPclCloud);
-	  
-		//Filter cloud to remove floor, ceiling and very far readings (velodyne frame)
-		pcl::PointCloud<pcl::PointXYZ>::Ptr filteredInputPclCloud(new pcl::PointCloud<pcl::PointXYZ>);
-		pcl::PassThrough<pcl::PointXYZ> pass;
+		if(backgroundSize == 0)
+		{
+			ROS_INFO("Extra cluster !! I need a background cloud!");
+			return;
+		}
 
-    pass.setInputCloud (inputPclCloud);
-  	pass.setFilterFieldName ("z");
-  	pass.setFilterLimits (-0.85, 1.5);
-  	pass.setFilterLimitsNegative (false);
-  	pass.filter (*filteredInputPclCloud);
-  	
-  	pass.setInputCloud (filteredInputPclCloud);
-  	pass.setFilterFieldName ("x");
-  	pass.setFilterLimits (5.0, 20.0);
-  	pass.setFilterLimitsNegative (true);
-  	pass.filter (*filteredInputPclCloud);
-	  
-	  sensor_msgs::PointCloud2::Ptr clustersCloudRos (new sensor_msgs::PointCloud2);
-	  pcl::PointCloud<pcl::PointXYZ>::Ptr clustersCloud (new pcl::PointCloud<pcl::PointXYZ>);
-	  sensor_msgs::PointCloud2::Ptr auxiliarCluster (new sensor_msgs::PointCloud2);
-	    
-	  //KdTree object for the clustering search method 
-	  pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
-	  tree->setInputCloud (filteredInputPclCloud);
-	  
-	  //Perform clustering
-	  ros::Time begin_clustering = ros::Time::now ();
-	  //Object for storing the normals.
-		pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
-		
-		//Estimate the normals.		
-		pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normalEstimation;
-		normalEstimation.setInputCloud(filteredInputPclCloud);
-		normalEstimation.setRadiusSearch(0.03);
-		normalEstimation.setSearchMethod(tree);
-		normalEstimation.compute(*normals);
-	 
-		// Region growing clustering object.
-		pcl::RegionGrowing<pcl::PointXYZ, pcl::Normal> clustering;
-		clustering.setMinClusterSize(100);
-		clustering.setMaxClusterSize(10000);
-		clustering.setSearchMethod(tree);
-		clustering.setNumberOfNeighbours(20);
-		clustering.setInputCloud(filteredInputPclCloud);
-		clustering.setInputNormals(normals);
-		// Set the angle in radians that will be the smoothness threshold
-		// (the maximum allowable deviation of the normals).
-		clustering.setSmoothnessThreshold(7.0 / 180.0 * M_PI); // 7 degrees.
-		// Set the curvature threshold. The disparity between curvatures will be
-		// tested after the normal deviation check has passed.
-		clustering.setCurvatureThreshold(1.0);
-	 
+
+		// pcl_conversions::toPCL(*inputCloud, *newRawPCL2);
+
+
+		pcl::fromROSMsg(*inputCloud, *newRawCloudPCL);
+
+		// pcl::VoxelGrid<pcl::PCLPointCloud2> grid;
+		// grid.setInputCloud (newRawPCL2);
+		// grid.setLeafSize (0.04f, 0.04f, 0.04f);
+		// grid.filter (*newRawPCL2);
+		// pcl::fromPCLPointCloud2(*newRawPCL2,*newRawCloudPCL);
+
+
+		float resolution = 0.5f;
+		// Instantiate octree-based point cloud change detection class
+		pcl::octree::OctreePointCloudChangeDetector<pcl::PointXYZ> octree (resolution);
+
+		octree.setInputCloud (backgroundCloudPCL);
+		octree.addPointsFromInputCloud ();
+		octree.switchBuffers ();
+
+		octree.setInputCloud (newRawCloudPCL);
+		octree.addPointsFromInputCloud ();
+		std::vector<int> newPointIdxVector;
+
+	// Get vector of point indices from octree voxels which did not exist in previous buffer
+		octree.getPointIndicesFromNewVoxels (newPointIdxVector);
+
+		diffCloudPCL->width = newPointIdxVector.size();
+		diffCloudPCL->height = 1;
+		diffCloudPCL->points.resize(diffCloudPCL->width * diffCloudPCL->height);
+		for (size_t i = 0; i < newPointIdxVector.size (); ++i)
+		{
+			diffCloudPCL->points[i].x = newRawCloudPCL->points[newPointIdxVector[i]].x;
+			diffCloudPCL->points[i].y = newRawCloudPCL->points[newPointIdxVector[i]].y;
+			diffCloudPCL->points[i].z = newRawCloudPCL->points[newPointIdxVector[i]].z;
+			
+		}
+
+		sensor_msgs::PointCloud2 publishedCloud;
+		pcl::toROSMsg (*diffCloudPCL , publishedCloud);
+
+		publishedCloud.header.frame_id = "/velodyne";
+		publishedCloud.header.stamp = ros::Time::now();	
+
+		pubdiff.publish (publishedCloud);
+
+		ROS_INFO("diff size %d", diffCloudPCL->width);
+
+
+
+		pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+
+		tree->setInputCloud (diffCloudPCL);
+
 		std::vector<pcl::PointIndices> cluster_indices;
-		clustering.extract(cluster_indices);
+		pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+		ec.setClusterTolerance (1.0); // 2cm
+		ec.setMinClusterSize (20);
+		ec.setMaxClusterSize (25000);
+		ec.setSearchMethod (tree);
+		ec.setInputCloud (diffCloudPCL);
+		ec.extract (cluster_indices);
 
-		double clustering_time = (ros::Time::now () - begin_clustering).toSec ();
-		// ROS_INFO ("%f secs for clustering (%d clusters).", clustering_time, (int) cluster_indices.size ());
-	  
-	  
-	  /*Extract each cluster and store them in:
-	  		- clusterPointClouds: pointClouds vector. Each element contains a cluster. Not viewable
-	  		- clustersCloud: pointcloud containing every cluster. Viewable in rviz
-	  */
-	  std::vector<pcl::PointIndices>::const_iterator it;
-	  velodyne_detect_person::pointCloudVector clusterPointClouds;
-	  
-	  int index = 0;
-	  //Creates folder to store every cluster in one image
-	//   double clusterTime = (ros::Time::now()-begin).toSec();
-	//   std::stringstream convertclusterTime;
-	//   convertclusterTime << clusterTime;
-	//   std::string foldername = "pruebas/cluster" + convertclusterTime.str();
-	//   mkdir(foldername.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-	  
-	  //For every cluster, store it into file and publisher structure
-	  for(it = cluster_indices.begin(); it != cluster_indices.end(); ++it) {
+		sensor_msgs::PointCloud2::Ptr clustersCloudRos (new sensor_msgs::PointCloud2);
+		pcl::PointCloud<pcl::PointXYZ>::Ptr clustersCloud (new pcl::PointCloud<pcl::PointXYZ>);
+
+		sensor_msgs::PointCloud2::Ptr auxiliarCluster (new sensor_msgs::PointCloud2);
+
+		std::vector<pcl::PointIndices>::const_iterator it;
+		velodyne_detect_person::pointCloudVector clusterPointClouds;
+
+		//For every cluster, store it into file and publisher structure
+		for(it = cluster_indices.begin(); it != cluster_indices.end(); ++it) 
+		{
 			pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZ>);
-		  pcl::copyPointCloud (*filteredInputPclCloud, it->indices, *cloud_cluster);
-		//   std::stringstream convertIndex;		  
-		//   convertIndex << index;
-		//   std::string filename = "pruebas/cluster" + convertclusterTime.str() + "/" + convertIndex.str() + ".pcd"; 
-		//   pcl::io::savePCDFileASCII (filename, *cloud_cluster);
+			pcl::copyPointCloud (*diffCloudPCL, it->indices, *cloud_cluster);
 			pcl::toROSMsg (*cloud_cluster , *auxiliarCluster);
 			auxiliarCluster->header.frame_id = "/velodyne";
 			auxiliarCluster->header.stamp = ros::Time::now();
 			clusterPointClouds.pointCloudVector.push_back(*auxiliarCluster);
 			*clustersCloud += *cloud_cluster;
-			index++;
-	  }
-	 
-	  pcl::toROSMsg (*clustersCloud , *clustersCloudRos);
-	  clustersCloudRos->header.frame_id = "/velodyne";
-	  clustersCloudRos->header.stamp = ros::Time::now();
-	  
-	  pub.publish (clusterPointClouds);
-	  pub2.publish (*clustersCloudRos);
-		n_published_msgs++;
-		double elapsed_time = (ros::Time::now () - begin).toSec ();
-		// ROS_INFO("Cluster publish freq: %f msgs/s - %d msgs in %f secs.", (float) n_published_msgs / elapsed_time, n_published_msgs, elapsed_time);
+		}
+		
+		// pcl::toROSMsg(*diffCloudPCL, *clustersCloudRos);
+		pcl::toROSMsg (*clustersCloud , *clustersCloudRos);
+		clustersCloudRos->header.frame_id = "/velodyne";
+		clustersCloudRos->header.stamp = ros::Time::now();
 
+		pub.publish (clusterPointClouds);
+		pub2.publish (*clustersCloudRos);
+
+
+
+		// //Convert ros PointCloud2 to pcl::PointCloud<pcl::pointXYZ>::Ptr
+	  // pcl::PCLPointCloud2 pcl_pc2;
+	  // pcl_conversions::toPCL(*inputCloud, pcl_pc2);
+	  // pcl::PointCloud<pcl::PointXYZ>::Ptr inputPclCloud(new pcl::PointCloud<pcl::PointXYZ>);
+	  // pcl::fromPCLPointCloud2(pcl_pc2,*inputPclCloud);
+	  
+		// //Filter cloud to remove floor, ceiling and very far readings (velodyne frame)
+		// pcl::PointCloud<pcl::PointXYZ>::Ptr filteredInputPclCloud(new pcl::PointCloud<pcl::PointXYZ>);
+		// pcl::PassThrough<pcl::PointXYZ> pass;
+		// *filteredInputPclCloud = *diffCloudPCL;
+	  
+	  // sensor_msgs::PointCloud2::Ptr clustersCloudRos (new sensor_msgs::PointCloud2);
+	  // pcl::PointCloud<pcl::PointXYZ>::Ptr clustersCloud (new pcl::PointCloud<pcl::PointXYZ>);
+	  // sensor_msgs::PointCloud2::Ptr auxiliarCluster (new sensor_msgs::PointCloud2);
+	    
+	  // //KdTree object for the clustering search method 
+	  // pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+	  // tree->setInputCloud (filteredInputPclCloud);
+	  
+	  // //Perform clustering
+	  // ros::Time begin_clustering = ros::Time::now ();
+	  // //Object for storing the normals.
+		// pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+		
+		// //Estimate the normals.		
+		// pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normalEstimation;
+		// normalEstimation.setInputCloud(filteredInputPclCloud);
+		// normalEstimation.setRadiusSearch(0.03);
+		// normalEstimation.setSearchMethod(tree);
+		// normalEstimation.compute(*normals);
+	 
+		// // Region growing clustering object.
+		// pcl::RegionGrowing<pcl::PointXYZ, pcl::Normal> clustering;
+		// clustering.setMinClusterSize(100);
+		// clustering.setMaxClusterSize(10000);
+		// clustering.setSearchMethod(tree);
+		// clustering.setNumberOfNeighbours(20);
+		// clustering.setInputCloud(filteredInputPclCloud);
+		// clustering.setInputNormals(normals);
+		// // Set the angle in radians that will be the smoothness threshold
+		// // (the maximum allowable deviation of the normals).
+		// clustering.setSmoothnessThreshold(7.0 / 180.0 * M_PI); // 7 degrees.
+		// // Set the curvature threshold. The disparity between curvatures will be
+		// // tested after the normal deviation check has passed.
+		// clustering.setCurvatureThreshold(1.0);
+	 
+		// std::vector<pcl::PointIndices> cluster_indices;
+		// clustering.extract(cluster_indices);
+
+		// double clustering_time = (ros::Time::now () - begin_clustering).toSec ();
+		// // ROS_INFO ("%f secs for clustering (%d clusters).", clustering_time, (int) cluster_indices.size ());
+	  
+	  
+	  // /*Extract each cluster and store them in:
+	  // 		- clusterPointClouds: pointClouds vector. Each element contains a cluster. Not viewable
+	  // 		- clustersCloud: pointcloud containing every cluster. Viewable in rviz
+	  // */
+	  // std::vector<pcl::PointIndices>::const_iterator it;
+	  // velodyne_detect_person::pointCloudVector clusterPointClouds;
+	  
+	  // //For every cluster, store it into file and publisher structure
+		// for(it = cluster_indices.begin(); it != cluster_indices.end(); ++it) 
+		// {
+		// 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZ>);
+		// 	pcl::copyPointCloud (*filteredInputPclCloud, it->indices, *cloud_cluster);
+		// 	pcl::toROSMsg (*cloud_cluster , *auxiliarCluster);
+		// 	auxiliarCluster->header.frame_id = "/velodyne";
+		// 	auxiliarCluster->header.stamp = ros::Time::now();
+		// 	clusterPointClouds.pointCloudVector.push_back(*auxiliarCluster);
+		// 	*clustersCloud += *cloud_cluster;
+		// }
+		
+		// // pcl::toROSMsg(*diffCloudPCL, *clustersCloudRos);
+	  // pcl::toROSMsg (*clustersCloud , *clustersCloudRos);
+	  // clustersCloudRos->header.frame_id = "/velodyne";
+	  // clustersCloudRos->header.stamp = ros::Time::now();
+	  
+	  // pub.publish (clusterPointClouds);
+	  // pub2.publish (*clustersCloudRos);
 	}
 	
 	ExtractClusters()
-    {
-      sub = n.subscribe("velodyne_points", 1, &ExtractClusters::extractClustersCallback, this);
-			begin = ros::Time::now();
-			n_published_msgs = 0;
-    }
+	{
+		pub = n.advertise<velodyne_detect_person::pointCloudVector> ("scene_clusters", 1);
+		pub2 = n.advertise<sensor_msgs::PointCloud2> ("clustersCloud", 1);
+		pubdiff = n.advertise<sensor_msgs::PointCloud2> ("diff_points", 1);
+		subBackground = n.subscribe("scene_background", 1, &findPersonBackgroundCallback);
+		sub = n.subscribe("velodyne_points", 1, &ExtractClusters::extractClustersCallback, this);
+		begin = ros::Time::now();
+		n_published_msgs = 0;
+	}
 };
 	
 

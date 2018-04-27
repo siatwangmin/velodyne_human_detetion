@@ -20,6 +20,8 @@
 #include "../include/PersonPosition.h"
 #include "../include/AriaMapInformation.h"
 #include "geometry_msgs/PointStamped.h"
+#include <geometry_msgs/PoseArray.h>
+// #include "geometry_msgs/PointArray.h"
 
 using namespace RoboCompPersonPosition;
 using namespace std;
@@ -87,11 +89,11 @@ bool clusterIsPerson(float height){
 class FindPerson
 {
 protected:
-ros::NodeHandle n;
+	ros::NodeHandle n;
 	
 public:
-	ros::Publisher pub  = n.advertise<sensor_msgs::PointCloud2> ("person_cloud", 1);
-	ros::Publisher pub2 = n.advertise<geometry_msgs::PointStamped> ("person_position", 1);
+	ros::Publisher pub;
+	ros::Publisher pub2;
 	
 	ros::Subscriber subBackground;
 	ros::Subscriber subClusters;
@@ -126,8 +128,6 @@ public:
 	//Receive data and perform the actual person detection. Lots of messages every second
 	void findPersonClustersCallback(const boost::shared_ptr<velodyne_detect_person::pointCloudVector>& clusterVector)
 	{
-		std::cout << "I need a background cloud!" << std::endl;
-		ROS_INFO("hey there");
 		pcl::PointCloud<pcl::PointXYZ>::Ptr clustersCloud (new pcl::PointCloud<pcl::PointXYZ>); //Contains every person cluster and is visible in rviz
 		pcl::PointCloud<pcl::PointXYZ> auxiliarCluster;
 		sensor_msgs::PointCloud2::Ptr clustersCloudRos (new sensor_msgs::PointCloud2);
@@ -140,7 +140,8 @@ public:
 			std::cout << "I need a background cloud!" << std::endl;
 		}
 		else
-		{		
+		{	
+			int human_cluster_count = 0;	
 			//For each cluster
 			for(int i = 0; i < clusterVector->pointCloudVector.size(); i++)
 			{
@@ -176,7 +177,8 @@ public:
 				}
 				// ROS_INFO("coincident Point ratio %f", float(float(numCoincidentPoints)/float(clusterPoints)));
 				//If cluster is not in background (coincident points < 5%),
-				if(float(float(numCoincidentPoints)/float(clusterPoints)) < 0.05){
+				if(float(float(numCoincidentPoints)/float(clusterPoints)) < 0.05)
+				{
 					pcl::fromROSMsg(clusterVector->pointCloudVector[i],auxiliarCluster);	
 					pcl::compute3DCentroid(clusterPCL, centroid);
 					
@@ -188,17 +190,19 @@ public:
 					{
 						// if(clusterIsPerson(clusterHeight(topPoint, lowestPoint)))
 						{	
+							human_cluster_count ++;
 							*clustersCloud += auxiliarCluster;
 							personCentroid.point.x = centroid(0,0);
 							personCentroid.point.y = centroid(1,0);
 							personCentroid.point.z = 0;
 							personCentroid.header.stamp = ros::Time();
-							ROS_INFO("get_person_cloud");
 						}
 					}
 				}
 			
 			}
+
+			ROS_INFO("human cluster num : %d ", human_cluster_count);
 			pcl::toROSMsg (*clustersCloud , *clustersCloudRos);
 			clustersCloudRos->header.frame_id = "/velodyne";
 			clustersCloudRos->header.stamp = ros::Time::now();
@@ -243,12 +247,13 @@ public:
 	//Receive robot position and stores it in a global variable
 	void findPersonRobotPositionCallback(const geometry_msgs::PointStamped& robotPosition)
 	{
-		robotPose = robotPosition;
-		
+		robotPose = robotPosition;		
 	}
 	
 	FindPerson()
     {
+		pub  = n.advertise<sensor_msgs::PointCloud2> ("person_cloud", 1);
+		pub2 = n.advertise<geometry_msgs::PointStamped> ("person_position", 1);
 		subBackground = n.subscribe("scene_background", 1, &FindPerson::findPersonBackgroundCallback, this);
 		subClusters = n.subscribe("scene_clusters", 1, &FindPerson::findPersonClustersCallback, this);
 		subRobotInfo = n.subscribe("robot_position", 1, &FindPerson::findPersonRobotPositionCallback, this);

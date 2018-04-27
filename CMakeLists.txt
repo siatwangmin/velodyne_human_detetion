@@ -35,7 +35,8 @@ generate_messages(DEPENDENCIES sensor_msgs)
 
 catkin_package()
 
-include_directories(${catkin_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
+include_directories(
+  include ${catkin_INCLUDE_DIRS}${catkin_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
@@ -71,3 +72,7 @@ add_dependencies(tf_publisher velodyne_detect_person_generate_messages_cpp)
 add_executable(robot_data src/robot_data.cpp ${HEADERS} ${SOURCE})
 target_link_libraries(robot_data ${catkin_LIBRARIES} ${ice_lib} ${iceUtil_lib})
 add_dependencies(robot_data velodyne_detect_person_generate_messages_cpp)
+
+add_executable(pcl_test src/pcl_test.cpp ${HEADERS} ${SOURCE})
+target_link_libraries(pcl_test ${catkin_LIBRARIES} ${ice_lib} ${iceUtil_lib} ${PCL_LIBRARIES})
+add_dependencies(pcl_test velodyne_detect_person_generate_messages_cpp)
