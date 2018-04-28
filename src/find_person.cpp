@@ -16,13 +16,9 @@
 #include <boost/shared_ptr.hpp>
 #include "velodyne_detect_person/pointCloudVector.h"
 #include <tf/transform_listener.h>
-#include "Ice/Ice.h"
-#include "../include/PersonPosition.h"
-#include "../include/AriaMapInformation.h"
 #include "geometry_msgs/PointStamped.h"
 #include <geometry_msgs/PoseArray.h>
 
-using namespace RoboCompPersonPosition;
 using namespace std;
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
@@ -34,7 +30,6 @@ bool backgroundGrid[100][100][30];
 Eigen::Vector4f centroid;
 geometry_msgs::PointStamped personCentroid;
 geometry_msgs::PointStamped personCentroidTransformed;
-MapPose detectedPersonPose;
 geometry_msgs::PointStamped robotPose;
 float topPoint, lowestPoint;
 
@@ -46,44 +41,12 @@ void transformPersonPosition (const tf::TransformListener& listener)
 	try
 	{
 		listener.transformPoint("world", personCentroid, personCentroidTransformed);
-
-		// if(personCentroid.point.x != 0 || personCentroid.point.y != 0 || personCentroid.point.z != 0)
-		// {
-		// 	// ROS_INFO("personCentroid: (%.2f, %.2f, %.2f) -----> personCentroidTransformed: (%.2f, %.2f, %.2f)",
-		// 	// personCentroid.point.x, personCentroid.point.y, personCentroid.point.z,
-		// 	// personCentroidTransformed.point.x, personCentroidTransformed.point.y,
-		// 	// personCentroidTransformed.point.z);
-		// }
 	}
 	catch(tf::TransformException& ex)
 	{
 		ROS_ERROR("Received an exception trying to transform a point from \"personCentroid\" to 		\"personCentroidTransformed\": %s", ex.what());
 	}
 }
-
-bool clusterIsRobot(float clusterX, float clusterY){
-	//If distance between robot and cluster centroid is small, cluster is robot
-	//TODO: Check if robot position has value before
-	float distance;
-	distance = sqrt(pow((clusterX - robotPose.point.x),2) + pow((clusterY - robotPose.point.y),2));
-	if(distance > 1){
-		return false;
-	}
-	else return true;
-}
-
-float clusterHeight(float top, float lowest){
-	return (top - lowest);	
-}
-
-bool clusterIsPerson(float height){
-	cout << "Height: " << height << endl;
-	if(1 < height	&& height < 2){
-		return true;
-	}
-	else return false;
-}
-
 
 class FindPerson
 {
@@ -99,7 +62,6 @@ public:
 	ros::Subscriber subClusters;
 	ros::Subscriber subRobotInfo;
 	tf::TransformListener listener;
-	Ice::CommunicatorPtr ic;
     
 	//Set background cloud in a global variable. One message every X seconds
 	void findPersonBackgroundCallback(const boost::shared_ptr<sensor_msgs::PointCloud2>& inputBackgroundCloud)
@@ -183,31 +145,20 @@ public:
 					pcl::fromROSMsg(clusterVector->pointCloudVector[i],auxiliarCluster);	
 					pcl::compute3DCentroid(clusterPCL, centroid);
 					
-					//If cluster is not the robot, the cluster is a person
-					//Save the position of the last person seen. This position will be sent to the robot
-					//TODO: Set transformation from /velodyne to /world automatically
+					human_cluster_count ++;
+					*clustersCloud += auxiliarCluster;
+					personCentroid.point.x = centroid(0,0);
+					personCentroid.point.y = centroid(1,0);
+					personCentroid.point.z = 0;
+					personCentroid.header.stamp = ros::Time();
+					//Transform position into world frame
+					transformPersonPosition(listener);
 
-					//if(!clusterIsRobot(centroid(0,0)+0.15,centroid(1,0)+1.78))
-					{
-						// if(clusterIsPerson(clusterHeight(topPoint, lowestPoint)))
-						{	
-							human_cluster_count ++;
-							*clustersCloud += auxiliarCluster;
-							personCentroid.point.x = centroid(0,0);
-							personCentroid.point.y = centroid(1,0);
-							personCentroid.point.z = 0;
-							personCentroid.header.stamp = ros::Time();
-							//Transform position into world frame
-							transformPersonPosition(listener);
-
-							geometry_msgs::Pose tmp_pose;
-							tmp_pose.position.x = personCentroid.point.x;
-							tmp_pose.position.y = personCentroid.point.y;
-							tmp_pose.position.z = personCentroid.point.z;
-							people_poses_array.poses.push_back(tmp_pose);
-
-						}
-					}
+					geometry_msgs::Pose tmp_pose;
+					tmp_pose.position.x = personCentroid.point.x;
+					tmp_pose.position.y = personCentroid.point.y;
+					tmp_pose.position.z = personCentroid.point.z;
+					people_poses_array.poses.push_back(tmp_pose);
 				}
 			
 			}
@@ -224,35 +175,6 @@ public:
 			people_positions_pub.publish(people_poses_array);
 			
 			pub2.publish (personCentroid);
-			// detectedPersonPose.x = personCentroidTransformed.point.x;
-			// detectedPersonPose.y = personCentroidTransformed.point.y;
-			
-			// //if not detected, set default control value (888)
-			// if(personCentroid.point.x == 0 || personCentroid.point.y == 0)
-			// {
-			// 	detectedPersonPose.x = 888;
-			// 	detectedPersonPose.y = 888;	
-			// }
-			
-			
-			// Ice::CommunicatorPtr ic;
-			// try {
-			// 	ic = Ice::initialize();
-			// 	Ice::ObjectPrx base = ic->stringToProxy("PersonPositionTopic.Endpoints:tcp -h 192.168.0.100 -p 10000");
-			// 	PersonPositionPrx personPosition = PersonPositionPrx::checkedCast(base);
-			// 	if (!personPosition)
-			// 		throw "Invalid proxy";
-			// 	personPosition->personPose(detectedPersonPose);
-			// } catch (const Ice::Exception& ex) {
-			// 	cerr << ex << endl;
-			// } catch (const char* msg) {
-			// 	cerr << msg << endl;
-			// }
-			// if (ic)
-			// 	ic->destroy();
-			
-			
-		
 		}
 	}
 	
