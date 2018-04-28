@@ -34,10 +34,17 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(FILES pointCloudVector.msg)
 generate_messages(DEPENDENCIES sensor_msgs)
 #add dynamic reconfigure api
+# generate_dynamic_reconfigure_options(
+#   cfg/Tutorials.cfg
+#   #...
+# )
+
 generate_dynamic_reconfigure_options(
-  cfg/Tutorials.cfg
+  cfg/ExtractClusters.cfg
   #...
 )
+
+
 
 catkin_package()
 
@@ -57,7 +64,7 @@ SET(SOURCE
 
 add_executable(extract_clusters src/extract_clusters.cpp)
 target_link_libraries(extract_clusters ${catkin_LIBRARIES} ${PCL_LIBRARIES})
-add_dependencies(extract_clusters velodyne_detect_person_generate_messages_cpp)
+add_dependencies(extract_clusters velodyne_detect_person_generate_messages_cpp  ${PROJECT_NAME}_gencfg)
 
 add_executable(set_static_background src/set_static_background.cpp)
 target_link_libraries(set_static_background ${catkin_LIBRARIES})
@@ -84,11 +91,11 @@ target_link_libraries(pcl_test ${catkin_LIBRARIES} ${ice_lib} ${iceUtil_lib} ${P
 add_dependencies(pcl_test velodyne_detect_person_generate_messages_cpp)
 
 
-# for dynamic reconfigure
-add_executable(dynamic_reconfigure_node src/server.cpp)
+# # for dynamic reconfigure
+# add_executable(dynamic_reconfigure_node src/server.cpp)
 
-# make sure configure headers are built before any node using them
-add_dependencies(dynamic_reconfigure_node ${PROJECT_NAME}_gencfg)
+# # make sure configure headers are built before any node using them
+# add_dependencies(dynamic_reconfigure_node ${PROJECT_NAME}_gencfg)
 
-# for dynamic reconfigure
-target_link_libraries(dynamic_reconfigure_node ${catkin_LIBRARIES})
+# # for dynamic reconfigure
+# target_link_libraries(dynamic_reconfigure_node ${catkin_LIBRARIES})

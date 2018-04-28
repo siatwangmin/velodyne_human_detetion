@@ -62,8 +62,6 @@ class SetBackground
 {
 protected:
     ros::NodeHandle n;
-
-
 public:
     ros::Publisher pub;
     ros::Subscriber sub;

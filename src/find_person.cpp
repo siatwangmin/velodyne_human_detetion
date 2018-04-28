@@ -47,13 +47,13 @@ void transformPersonPosition (const tf::TransformListener& listener)
 	{
 		listener.transformPoint("world", personCentroid, personCentroidTransformed);
 
-		if(personCentroid.point.x != 0 || personCentroid.point.y != 0 || personCentroid.point.z != 0)
-		{
-			ROS_INFO("personCentroid: (%.2f, %.2f, %.2f) -----> personCentroidTransformed: (%.2f, %.2f, %.2f)",
-			personCentroid.point.x, personCentroid.point.y, personCentroid.point.z,
-			personCentroidTransformed.point.x, personCentroidTransformed.point.y,
-			personCentroidTransformed.point.z);
-		}
+		// if(personCentroid.point.x != 0 || personCentroid.point.y != 0 || personCentroid.point.z != 0)
+		// {
+		// 	// ROS_INFO("personCentroid: (%.2f, %.2f, %.2f) -----> personCentroidTransformed: (%.2f, %.2f, %.2f)",
+		// 	// personCentroid.point.x, personCentroid.point.y, personCentroid.point.z,
+		// 	// personCentroidTransformed.point.x, personCentroidTransformed.point.y,
+		// 	// personCentroidTransformed.point.z);
+		// }
 	}
 	catch(tf::TransformException& ex)
 	{
@@ -267,7 +267,7 @@ public:
 		pub  = n.advertise<sensor_msgs::PointCloud2> ("person_cloud", 1);
 		pub2 = n.advertise<geometry_msgs::PointStamped> ("person_position", 1);
 
-		people_positions_pub = n.advertise<geometry_msgs::PoseArray>("people_positins", 1);
+		people_positions_pub = n.advertise<geometry_msgs::PoseArray>("people_positions", 1);
 		subBackground = n.subscribe("scene_background", 1, &FindPerson::findPersonBackgroundCallback, this);
 		subClusters = n.subscribe("scene_clusters", 1, &FindPerson::findPersonClustersCallback, this);
 		subRobotInfo = n.subscribe("robot_position", 1, &FindPerson::findPersonRobotPositionCallback, this);
