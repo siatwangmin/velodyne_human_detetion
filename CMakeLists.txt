@@ -28,10 +28,16 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   genmsg
   PCL REQUIRED
+  dynamic_reconfigure
 )
 
 add_message_files(FILES pointCloudVector.msg)
 generate_messages(DEPENDENCIES sensor_msgs)
+#add dynamic reconfigure api
+generate_dynamic_reconfigure_options(
+  cfg/Tutorials.cfg
+  #...
+)
 
 catkin_package()
 
@@ -76,3 +82,13 @@ add_dependencies(robot_data velodyne_detect_person_generate_messages_cpp)
 add_executable(pcl_test src/pcl_test.cpp ${HEADERS} ${SOURCE})
 target_link_libraries(pcl_test ${catkin_LIBRARIES} ${ice_lib} ${iceUtil_lib} ${PCL_LIBRARIES})
 add_dependencies(pcl_test velodyne_detect_person_generate_messages_cpp)
+
+
+# for dynamic reconfigure
+add_executable(dynamic_reconfigure_node src/server.cpp)
+
+# make sure configure headers are built before any node using them
+add_dependencies(dynamic_reconfigure_node ${PROJECT_NAME}_gencfg)
+
+# for dynamic reconfigure
+target_link_libraries(dynamic_reconfigure_node ${catkin_LIBRARIES})

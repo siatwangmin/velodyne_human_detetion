@@ -21,7 +21,6 @@
 #include "../include/AriaMapInformation.h"
 #include "geometry_msgs/PointStamped.h"
 #include <geometry_msgs/PoseArray.h>
-// #include "geometry_msgs/PointArray.h"
 
 using namespace RoboCompPersonPosition;
 using namespace std;
@@ -94,6 +93,7 @@ protected:
 public:
 	ros::Publisher pub;
 	ros::Publisher pub2;
+	ros::Publisher people_positions_pub;
 	
 	ros::Subscriber subBackground;
 	ros::Subscriber subClusters;
@@ -128,6 +128,7 @@ public:
 	//Receive data and perform the actual person detection. Lots of messages every second
 	void findPersonClustersCallback(const boost::shared_ptr<velodyne_detect_person::pointCloudVector>& clusterVector)
 	{
+		geometry_msgs::PoseArray people_poses_array;
 		pcl::PointCloud<pcl::PointXYZ>::Ptr clustersCloud (new pcl::PointCloud<pcl::PointXYZ>); //Contains every person cluster and is visible in rviz
 		pcl::PointCloud<pcl::PointXYZ> auxiliarCluster;
 		sensor_msgs::PointCloud2::Ptr clustersCloudRos (new sensor_msgs::PointCloud2);
@@ -196,6 +197,15 @@ public:
 							personCentroid.point.y = centroid(1,0);
 							personCentroid.point.z = 0;
 							personCentroid.header.stamp = ros::Time();
+							//Transform position into world frame
+							transformPersonPosition(listener);
+
+							geometry_msgs::Pose tmp_pose;
+							tmp_pose.position.x = personCentroid.point.x;
+							tmp_pose.position.y = personCentroid.point.y;
+							tmp_pose.position.z = personCentroid.point.z;
+							people_poses_array.poses.push_back(tmp_pose);
+
 						}
 					}
 				}
@@ -209,18 +219,20 @@ public:
 			
 			pub.publish (clustersCloudRos);		
 			
-			//Transform position into world frame
-			transformPersonPosition(listener);
-			pub2.publish (personCentroid);
-			detectedPersonPose.x = personCentroidTransformed.point.x;
-			detectedPersonPose.y = personCentroidTransformed.point.y;
+			people_poses_array.header.frame_id = "/velodyne";
+			people_poses_array.header.stamp = ros::Time::now();
+			people_positions_pub.publish(people_poses_array);
 			
-			//if not detected, set default control value (888)
-			if(personCentroid.point.x == 0 || personCentroid.point.y == 0)
-			{
-				detectedPersonPose.x = 888;
-				detectedPersonPose.y = 888;	
-			}
+			pub2.publish (personCentroid);
+			// detectedPersonPose.x = personCentroidTransformed.point.x;
+			// detectedPersonPose.y = personCentroidTransformed.point.y;
+			
+			// //if not detected, set default control value (888)
+			// if(personCentroid.point.x == 0 || personCentroid.point.y == 0)
+			// {
+			// 	detectedPersonPose.x = 888;
+			// 	detectedPersonPose.y = 888;	
+			// }
 			
 			
 			// Ice::CommunicatorPtr ic;
@@ -254,6 +266,8 @@ public:
     {
 		pub  = n.advertise<sensor_msgs::PointCloud2> ("person_cloud", 1);
 		pub2 = n.advertise<geometry_msgs::PointStamped> ("person_position", 1);
+
+		people_positions_pub = n.advertise<geometry_msgs::PoseArray>("people_positins", 1);
 		subBackground = n.subscribe("scene_background", 1, &FindPerson::findPersonBackgroundCallback, this);
 		subClusters = n.subscribe("scene_clusters", 1, &FindPerson::findPersonClustersCallback, this);
 		subRobotInfo = n.subscribe("robot_position", 1, &FindPerson::findPersonRobotPositionCallback, this);
